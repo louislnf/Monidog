@@ -37,6 +37,9 @@ class Monidog:
         # scroll mechanism for stats view
         self.firstUrlDisplayedIndex = 0
         self.firstUrlDisplayedIndexLock = threading.Lock()
+        # scroll mechanism for alerts view
+        self.lastAlertDisplayedIndex = None
+        self.lastAlertDisplayedIndexLock = threading.Lock()
         
         # inputs related attributes
         # editing mode
@@ -75,6 +78,14 @@ class Monidog:
         with self.firstUrlDisplayedIndexLock:
             self.firstUrlDisplayedIndex = newIndex
 
+    # thread safe getter and setter for lastAlertDisplayedIndex
+    def getLastAlertDisplayedIndex(self):
+        with self.lastAlertDisplayedIndexLock:
+            return self.lastAlertDisplayedIndex
+    def setLastAlertDisplayedIndex(self, newIndex):
+        with self.lastAlertDisplayedIndexLock:
+            self.lastAlertDisplayedIndex = newIndex
+    
     def addWebsiteToMonitor(self, url, checkInterval):
         with self.modifyWebsitesList:
             if not(url in self.urls):
@@ -124,11 +135,15 @@ class Monidog:
                     self.downDetector[url] = True
                     with self.alertHistoryLock:
                         self.alertHistory.append((time.time(), True, url))
+                        last = self.getLastAlertDisplayedIndex()
+                        self.setLastAlertDisplayedIndex(0 if last == None else last+1)
                 elif avgAvailability > 80 and self.downDetector[url]:
                     #server is back up
                     self.downDetector[url] = False
                     with self.alertHistoryLock:
                         self.alertHistory.append((time.time(), False, url))
+                        last = self.getLastAlertDisplayedIndex()
+                        self.setLastAlertDisplayedIndex(0 if last == None else last+1)
     
     def startCheckingForAlerts(self):
         if self.checkingForAlertsInterval == None:
@@ -252,16 +267,19 @@ class Monidog:
         #drawing the alert box
         self.screenDrawer.drawBox(y1, x1, y2, x2, "Alerts")
         with self.alertHistoryLock:
-            for i in range(min(5, len(self.alertHistory))):
-                (timestamp, wentDown, url) = alert = self.alertHistory[-1-i]
-                niceDate = time.strftime("%D %H:%M", time.localtime(timestamp))
-                if wentDown:
-                    text = "{0} : {1} went down.".format(niceDate, url)
-                    flag = curses.color_pair(3)
-                else:
-                    text = "{0} : {1} went back up.".format(niceDate, url)
-                    flag = curses.color_pair(4)
-                self.screenDrawer.drawText(y2-1-i, x1+1, text, flag, x2-x1-2)
+            last = self.getLastAlertDisplayedIndex()
+            if last != None:
+                first = max(0, last-4)
+                for i in range(last-first+1):
+                    (timestamp, wentDown, url) = self.alertHistory[last-i]
+                    niceDate = time.strftime("%D %H:%M", time.localtime(timestamp))
+                    if wentDown:
+                        text = "#{2}: {0} : {1} went down.".format(niceDate, url, last-i)
+                        flag = curses.color_pair(3)
+                    else:
+                        text = "#{2}: {0} : {1} went back up.".format(niceDate, url, last-i)
+                        flag = curses.color_pair(4)
+                    self.screenDrawer.drawText(y2-1-i, x1+1, text, flag, x2-x1-2)
 
     def __drawHelp(self, y1, x1, y2, x2):
         # drawing the surrounding box
@@ -273,9 +291,9 @@ class Monidog:
             self.screenDrawer.drawText(y1+2, x1+2, "Use UP/DOWN keys to change the interval time", 0, x2-x1-3)
             self.screenDrawer.drawText(y1+3, x1+2, "Press Esc to stop editing.", 0, x2-x1-3)
         else:
-            self.screenDrawer.drawText(y1+1, x1+2, "a : add a website", 0, x2-x1-3)
-            self.screenDrawer.drawText(y1+2, x1+2, "x : remove selected website", 0, x2-x1-3)
-            self.screenDrawer.drawText(y1+3, x1+2, "UP/DOWN : move selection | q : quit", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+1, x1+2, "a : add a website | x : remove selected website", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+2, x1+2, "UP/DOWN : move selection | j/k : scroll alerts", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+3, x1+2, "q : quit", 0, x2-x1-3)
         self.screenDrawer.drawText(y1+1, x2-20, "F1 : last 2 min")
         self.screenDrawer.drawText(y1+2, x2-20, "F2 : last hour")
         self.screenDrawer.drawText(y1+3, x2-20, "F3 : load urls.txt")
@@ -284,7 +302,7 @@ class Monidog:
         # attempt to open urls file
         try:
             urlsFile = open("urls.txt", "r")
-        except FileNotFoundError as err:
+        except FileNotFoundError:
             urlsFile = None
         # if attempt failed -> return
         if urlsFile == None:
@@ -411,6 +429,19 @@ class Monidog:
                     selectedUrlIndex = self.getSelectedUrlIndex()
                     if selectedUrlIndex != None and selectedUrlIndex < len(self.urls)-1:
                         self.setSelectedUrlIndex(selectedUrlIndex+1)
+            elif key == 106 and not(editingMode):
+                #key is 'j' -> moving scroll alert up if possible
+                with self.alertHistoryLock:
+                    lastAlertDisplayedIndex = self.getLastAlertDisplayedIndex()
+                    if lastAlertDisplayedIndex > 4:
+                        self.setLastAlertDisplayedIndex(lastAlertDisplayedIndex-1)
+            elif key == 107 and not(editingMode):
+                #key is 'k' -> moving scroll alert down if possible
+                with self.alertHistoryLock:
+                    lastAlertDisplayedIndex = self.getLastAlertDisplayedIndex()
+                    if lastAlertDisplayedIndex < len(self.alertHistory)-1:
+                        self.setLastAlertDisplayedIndex(lastAlertDisplayedIndex+1)
+                    
 
         #####################
         # DESINITIALIZATION #
