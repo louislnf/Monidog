@@ -25,7 +25,7 @@ class WebsiteMonitor:
         success = True
         checkTime = time.time()
         try:
-            r = requests.head(self.url)
+            r = requests.head(self.url, timeout=min(self.checkInterval, 5.0))
         except requests.exceptions.RequestException:
             success = False
         responseTime = time.time()-checkTime

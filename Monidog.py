@@ -70,6 +70,7 @@ class Monidog:
     def getFirstUrlDisplayedIndex(self):
         with self.firstUrlDisplayedIndexLock:
             return self.firstUrlDisplayedIndex
+    
     def setFirstUrlDisplayedIndex(self, newIndex):
         with self.firstUrlDisplayedIndexLock:
             self.firstUrlDisplayedIndex = newIndex
@@ -106,7 +107,6 @@ class Monidog:
                 self.websiteStatsRefresh2MinIntervals.pop(url)
                 self.websiteMonitors.pop(url)
                 self.downDetector.pop(url)
-            
     
     def removeAllWebsiteMonitors(self):
         with self.modifyWebsitesList:
@@ -276,9 +276,31 @@ class Monidog:
             self.screenDrawer.drawText(y1+1, x1+2, "a : add a website", 0, x2-x1-3)
             self.screenDrawer.drawText(y1+2, x1+2, "x : remove selected website", 0, x2-x1-3)
             self.screenDrawer.drawText(y1+3, x1+2, "UP/DOWN : move selection | q : quit", 0, x2-x1-3)
-        self.screenDrawer.drawText(y1+1, x2-17, "F1 : last 2 min")
-        self.screenDrawer.drawText(y1+2, x2-17, "F2 : last hour")
+        self.screenDrawer.drawText(y1+1, x2-20, "F1 : last 2 min")
+        self.screenDrawer.drawText(y1+2, x2-20, "F2 : last hour")
+        self.screenDrawer.drawText(y1+3, x2-20, "F3 : load urls.txt")
     
+    def loadUrlFile(self):
+        # attempt to open urls file
+        try:
+            urlsFile = open("urls.txt", "r")
+        except FileNotFoundError as err:
+            urlsFile = None
+        # if attempt failed -> return
+        if urlsFile == None:
+            return
+        # parsing the file
+        urls = []
+        url = urlsFile.readline().replace('\n', '').strip()
+        while len(url) > 0:
+            urls.append(url)
+            url = urlsFile.readline().replace('\n', '').strip()
+        # closing file
+        urlsFile.close()
+        # adding the urls to monitor
+        for url in urls:
+            self.addWebsiteToMonitor(url, 10.0)  
+
     def main(self, stdscr):
         #####
         # this is the function called by the curses.wrapper()
@@ -338,6 +360,9 @@ class Monidog:
                 #key is F2 -> stats for the last hour
                 with self.last2MinLock:
                     self.last2Min = False
+            elif key == curses.KEY_F3:
+                #key is F3 -> load url file
+                self.loadUrlFile()
             elif key == 27 and editingMode:
                 # key is Esc -> stop editing
                 self.setInputsInfo(( False, urlBeingWritten, currentInterval ))
@@ -400,3 +425,4 @@ class Monidog:
 if __name__ == '__main__':
     monidog = Monidog()
     curses.wrapper(monidog.main)
+    print("Please wait at most 5 seconds for the last pending requests to timeout...")
