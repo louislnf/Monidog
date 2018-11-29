@@ -99,7 +99,7 @@ class Monidog:
                 # - website monitoring
                 self.websiteMonitors[url].startMonitoring()
                 # - stats refreshing
-                self.websiteStatsRefresh1HourIntervals[url] = Interval(2.0, self.websiteStatsCalculators[url].calculateStatsForTheLast2min)
+                self.websiteStatsRefresh1HourIntervals[url] = Interval(60.0, self.websiteStatsCalculators[url].calculateStatsForTheLast2min)
                 self.websiteStatsRefresh2MinIntervals[url] = Interval(10.0, self.websiteStatsCalculators[url].calculateStatsForTheLastHour)
 
     def removeWebsiteMonitor(self, index, removeFromUrlList):
