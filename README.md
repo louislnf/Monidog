@@ -34,5 +34,5 @@ pip install requests
 
 Then, to launch the application:
 ```
-python3 Monidog.py
+python3 src/Monidog.py
 ```
