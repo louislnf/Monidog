@@ -10,6 +10,6 @@ Monidog is a Python3 application using different modules :
 
 ## Launch the application
 
-```shell
+```
 python3 app.py
 ```
