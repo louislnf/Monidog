@@ -231,12 +231,17 @@ class Monidog:
         self.screenDrawer.drawText(y1+1, x2-6, "{0:4.0f}s".format(currentInterval))
 
     def __drawWebsiteStatsHeader(self, y1, x1, y2, x2): 
-        self.screenDrawer.drawText(y1, x1+1, "URL", curses.A_BOLD, 30)
-        self.screenDrawer.drawText(y1, x2-55, "AVAILABILITY", curses.A_BOLD, 12)
-        self.screenDrawer.drawText(y1, x2-40, "AVG TIME", curses.A_BOLD, 10)
-        self.screenDrawer.drawText(y1, x2-30, "MIN TIME", curses.A_BOLD, 10)
-        self.screenDrawer.drawText(y1, x2-20, "MAX TIME", curses.A_BOLD, 10)
-        self.screenDrawer.drawText(y1, x2-10, "NB CHECKS", curses.A_BOLD, 10)
+        self.screenDrawer.drawText(y1, x1+1, "URL", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+41, "AVAILABILITY", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+55, "AVG TIME", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+65, "MIN TIME", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+75, "MAX TIME", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+86, "200", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+92, "301", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+98, "404", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+104, "500", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+110, "other", curses.A_BOLD)
+        self.screenDrawer.drawText(y1, x1+116, "total", curses.A_BOLD)
 
     def __drawWebsiteStats(self, y1, x1, y2, x2, url, stats, selected):
         (timestamp, avgAvailability, avgResponseTime, minResponseTime, maxResponseTime, statusCodeDict, numberOfChecks) = stats
@@ -247,15 +252,30 @@ class Monidog:
         #url
         self.screenDrawer.drawText(y1, x1+1, url, flag, 30)
         #availability
-        self.screenDrawer.drawText(y1, x2-55, "{0}%".format(self.__optionalStatToString(avgAvailability)), flag, 12)
+        self.screenDrawer.drawText(y1, x1+41, "{0}%".format(self.__optionalStatToString(avgAvailability)), flag, 12)
         #avg time
-        self.screenDrawer.drawText(y1, x2-40, "{0} ms".format(self.__optionalStatToString(avgResponseTime)), flag, 10)
+        self.screenDrawer.drawText(y1, x1+55, "{0} ms".format(self.__optionalStatToString(avgResponseTime)), flag, 8)
         #min time
-        self.screenDrawer.drawText(y1, x2-30, "{0} ms".format(self.__optionalStatToString(minResponseTime)), flag, 10)
+        self.screenDrawer.drawText(y1, x1+65, "{0} ms".format(self.__optionalStatToString(minResponseTime)), flag, 8)
         #max time
-        self.screenDrawer.drawText(y1, x2-20, "{0} ms".format(self.__optionalStatToString(maxResponseTime)), flag, 10)
-        #n checks
-        self.screenDrawer.drawText(y1, x2-10, "{0}".format(numberOfChecks), flag, 10)
+        self.screenDrawer.drawText(y1, x1+75, "{0} ms".format(self.__optionalStatToString(maxResponseTime)), flag, 8)
+        # code 200
+        nbCode200 = 0 if not(200 in statusCodeDict) else statusCodeDict[200]
+        self.screenDrawer.drawText(y1, x1+86, "{0}".format(nbCode200), flag, 4)
+        # code 301
+        nbCode301 = 0 if not(301 in statusCodeDict) else statusCodeDict[301]
+        self.screenDrawer.drawText(y1, x1+92, "{0}".format(nbCode301), flag, 4)
+        # code 404
+        nbCode404 = 0 if not(404 in statusCodeDict) else statusCodeDict[404]
+        self.screenDrawer.drawText(y1, x1+98, "{0}".format(nbCode404), flag, 4)
+        # code 500
+        nbCode500 = 0 if not(500 in statusCodeDict) else statusCodeDict[500]
+        self.screenDrawer.drawText(y1, x1+104, "{0}".format(nbCode500), flag, 4)
+        # code others
+        nbCodeTotal = sum(statusCodeDict[code] for code in statusCodeDict)
+        nbCodeOthers = nbCodeTotal-nbCode200-nbCode404-nbCode500
+        self.screenDrawer.drawText(y1, x1+110, "{0}".format(nbCodeOthers), flag, 4)
+        self.screenDrawer.drawText(y1, x1+116, "{0}".format(nbCodeOthers), flag, 4)
 
     def __optionalStatToString(self, s):
         if s < 0:
