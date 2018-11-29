@@ -1,4 +1,3 @@
-
 import threading, time
 
 class Interval:
