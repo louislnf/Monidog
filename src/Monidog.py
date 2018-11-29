@@ -393,7 +393,7 @@ class Monidog:
             elif 32 <= key and key <= 126 and editingMode:
                 # key is writable ascii char -> we append it to the url being written
                 self.setInputsInfo((editingMode, "{0}{1}".format(urlBeingWritten, chr(key)), currentInterval ))
-            elif key == 127 and editingMode:
+            elif (key == 127 or key == curses.KEY_BACKSPACE) and editingMode:
                 # key is backspace -> we remove the last char of the url beign written
                 self.setInputsInfo(( editingMode, urlBeingWritten[:-1], currentInterval ))
             elif key == 10 and editingMode:
