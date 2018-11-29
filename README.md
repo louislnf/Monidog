@@ -11,5 +11,5 @@ Monidog is a Python3 application using different modules :
 ## Launch the application
 
 ```
-python3 app.py
+python3 Monidog.py
 ```
