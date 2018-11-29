@@ -18,16 +18,26 @@ class Monidog:
         self.alertHistory = []
         self.checkingForAlertsInterval = None
         # adding lock to prevent modifying the websites list as the ui is drawing stats
-        self.modifyWebsitesList = threading.RLock()
+        self.modifyWebsitesList = threading.Lock()
         # adding lock for alert history
-        self.alertHistoryLock = threading.RLock()
+        self.alertHistoryLock = threading.Lock()
 
         # gui related attributes
         self.guiRefreshingInterval = None
         self.screenDrawer = None
         # the screen drawer is used from different thread to update the gui, so it needs a lock
-        self.guiLock = threading.RLock()
-
+        self.guiLock = threading.Lock()
+        # boolean to know if we are in the last 2min stats view or the last hour stats view
+        self.last2Min = True
+        self.last2MinLock = threading.Lock()
+        # url selection attributes
+        self.urls = []
+        self.selectedUrlIndex = None
+        self.selectedUrlIndexLock = threading.Lock()
+        # scroll mechanism for stats view
+        self.firstUrlDisplayedIndex = 0
+        self.firstUrlDisplayedIndexLock = threading.Lock()
+        
         # inputs related attributes
         # editing mode
         self.inputsEditingMode = False
@@ -36,7 +46,7 @@ class Monidog:
         # check interval
         self.currentInterval = 10.0
         # a lock for these inputs info
-        self.inputsInfoLock = threading.RLock()
+        self.inputsInfoLock = threading.Lock()
     
     # thread safe getters and setters for inputs info
     def getInputsInfo(self):
@@ -47,12 +57,32 @@ class Monidog:
         with self.inputsInfoLock:
             self.inputsEditingMode, self.urlBeingWritten, self.currentInterval = newInputsInfo
     
+    # thread safe getters and setters for selectedUrlIndex
+    def getSelectedUrlIndex(self):
+        with self.selectedUrlIndexLock:
+            return self.selectedUrlIndex
+    
+    def setSelectedUrlIndex(self, newIndex):
+        with self.selectedUrlIndexLock:
+            self.selectedUrlIndex = newIndex
+    
+    # thread safe getter and setter for firstUrlDisplayedIndex
+    def getFirstUrlDisplayedIndex(self):
+        with self.firstUrlDisplayedIndexLock:
+            return self.firstUrlDisplayedIndex
+    def setFirstUrlDisplayedIndex(self, newIndex):
+        with self.firstUrlDisplayedIndexLock:
+            self.firstUrlDisplayedIndex = newIndex
+
     def addWebsiteToMonitor(self, url, checkInterval):
-        if not(url in self.websiteMonitors):
-            with self.modifyWebsitesList:
+        with self.modifyWebsitesList:
+            if not(url in self.urls):
                 self.websiteMonitors[url] = WebsiteMonitor(url, checkInterval)
                 self.websiteStatsCalculators[url] = WebsiteStatsCalculator(self.websiteMonitors[url])
                 self.downDetector[url] = False
+                self.urls.append(url)
+                if self.getSelectedUrlIndex() == None:
+                    self.setSelectedUrlIndex(0)
                 #launching the parallel tasks
                 # - website monitoring
                 self.websiteMonitors[url].startMonitoring()
@@ -60,9 +90,12 @@ class Monidog:
                 self.websiteStatsRefresh1HourIntervals[url] = Interval(2.0, self.websiteStatsCalculators[url].calculateStatsForTheLast2min)
                 self.websiteStatsRefresh2MinIntervals[url] = Interval(10.0, self.websiteStatsCalculators[url].calculateStatsForTheLastHour)
 
-    def removeWebsiteMonitor(self, url):
-        if url in self.websiteMonitors:
-            with self.modifyWebsitesList:
+    def removeWebsiteMonitor(self, index, removeFromUrlList):
+        with self.modifyWebsitesList:
+            if index in range(len(self.urls)):
+                url = self.urls[index]
+                if removeFromUrlList:
+                    self.urls.pop(index)
                 # stopping the monitoring task for this website
                 self.websiteMonitors[url].stopMonitoring()
                 # stopping the stats refreshing intervals for this website
@@ -72,12 +105,14 @@ class Monidog:
                 self.websiteStatsRefresh1HourIntervals.pop(url)
                 self.websiteStatsRefresh2MinIntervals.pop(url)
                 self.websiteMonitors.pop(url)
+                self.downDetector.pop(url)
+            
     
     def removeAllWebsiteMonitors(self):
         with self.modifyWebsitesList:
-            keys = list(self.websiteMonitors.keys())
-            for url in keys:
-                self.removeWebsiteMonitor(url)
+            nbUrls = len(self.urls)
+        for i in range(nbUrls):
+            self.removeWebsiteMonitor(i, False)
     
     def checkForAlerts(self):
         with self.modifyWebsitesList:
@@ -121,31 +156,41 @@ class Monidog:
             # clearing screen
             self.screenDrawer.clear()
             # drawing the main box
-            self.screenDrawer.drawBox(0 , 0, MAX_Y+1, MAX_X, "Monidog")
+            self.screenDrawer.drawBox(0 , 0, MAX_Y, MAX_X, "Monidog")
             # drawing the inputs
             self.__drawInputs(1, 1, 3, MAX_X-1)
 
             # drawing the stats box
-            self.screenDrawer.drawBox(4, 1, MAX_Y-11, MAX_X-1, "Stats")
+            with self.last2MinLock:
+                last2Min = self.last2Min
+            title = "Stats (last 2 min)" if last2Min else "Stats (last hour)"
+            self.screenDrawer.drawBox(4, 1, MAX_Y-13, MAX_X-1, title)
             # drawing the stats table headers line
             self.__drawWebsiteStatsHeader(5, 2, MAX_Y-5, MAX_X-2)
             # drawing the stats for each websites
-            numberOfStatsLinesDisplayable = MAX_Y-11-6
+            numberOfStatsLinesDisplayable = MAX_Y-13-6
             statsLineDisplayed = 0
             with self.modifyWebsitesList:
-                for url in self.websiteStatsCalculators:
-                    if statsLineDisplayed == numberOfStatsLinesDisplayable:
-                        break
-                    stats = self.websiteStatsCalculators[url].getStatsForTheLast2min()
+                first = self.getFirstUrlDisplayedIndex()
+                last = first+numberOfStatsLinesDisplayable
+                selectedUrlIndex = self.getSelectedUrlIndex()
+                if selectedUrlIndex != None and selectedUrlIndex < first:
+                    first, last = selectedUrlIndex, selectedUrlIndex+numberOfStatsLinesDisplayable
+                elif selectedUrlIndex != None and selectedUrlIndex >= last:
+                    first, last = selectedUrlIndex+1-numberOfStatsLinesDisplayable, selectedUrlIndex+1
+                self.setFirstUrlDisplayedIndex(max(first, 0))
+                for i in range(max(first, 0),min(last, len(self.urls))):
+                    url = self.urls[i]
+                    stats = self.websiteStatsCalculators[url].getStatsForTheLast2min() if last2Min else self.websiteStatsCalculators[url].getStatsForTheLastHour()
                     line = 6+statsLineDisplayed
-                    self.__drawWebsiteStats(line, 2, line, MAX_X-2, url, stats, False)
+                    self.__drawWebsiteStats(line, 2, line, MAX_X-2, url, stats, i == selectedUrlIndex)
                     statsLineDisplayed += 1
             
             # drawing the alerts
-            self.__drawAlerts(MAX_Y-10, 1, MAX_Y-4, MAX_X-1)
+            self.__drawAlerts(MAX_Y-12, 1, MAX_Y-6, MAX_X-1)
 
             #draw the help at the bottom
-            self.__drawHelp(MAX_Y-3, 1, MAX_Y+1, MAX_X-1)
+            self.__drawHelp(MAX_Y-5, 1, MAX_Y-1, MAX_X-1)
 
             #refreshing the screen
             self.screenDrawer.refresh()
@@ -181,6 +226,9 @@ class Monidog:
     def __drawWebsiteStats(self, y1, x1, y2, x2, url, stats, selected):
         (timestamp, avgAvailability, avgResponseTime, minResponseTime, maxResponseTime, statusCodeDict, numberOfChecks) = stats
         flag = curses.color_pair(2) if selected else 0
+        if selected:
+            for x in range(x1, x2+1):
+                self.screenDrawer.draw(y1, x, " ", flag)
         #url
         self.screenDrawer.drawText(y1, x1+1, url, flag, 30)
         #availability
@@ -221,13 +269,15 @@ class Monidog:
         # getting the inputs info
         (editingMode, urlBeingWritten, currentInterval) = self.getInputsInfo()
         if editingMode:
-            self.screenDrawer.drawText(y1+1, x1+2, "Type the name the website you want to monitor", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+1, x1+2, "Type the url the website you want to monitor", 0, x2-x1-3)
             self.screenDrawer.drawText(y1+2, x1+2, "Use UP/DOWN keys to change the interval time", 0, x2-x1-3)
-            self.screenDrawer.drawText(y1+3, x1+2, "Press Esc to go stop editing.", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+3, x1+2, "Press Esc to stop editing.", 0, x2-x1-3)
         else:
-            self.screenDrawer.drawText(y1+1, x1+2, "a : add a website.", 0, x2-x1-3)
-            self.screenDrawer.drawText(y1+2, x1+2, "x : remove selected website.", 0, x2-x1-3)
-            self.screenDrawer.drawText(y1+3, x1+2, "q : quit.", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+1, x1+2, "a : add a website", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+2, x1+2, "x : remove selected website", 0, x2-x1-3)
+            self.screenDrawer.drawText(y1+3, x1+2, "UP/DOWN : move selection | q : quit", 0, x2-x1-3)
+        self.screenDrawer.drawText(y1+1, x2-17, "F1 : last 2 min")
+        self.screenDrawer.drawText(y1+2, x2-17, "F2 : last hour")
     
     def main(self, stdscr):
         #####
@@ -244,7 +294,7 @@ class Monidog:
         # doing additionnal settings for curses
         curses.curs_set(0) # hiding the cursor
         stdscr.keypad(1) # setting the keypad option
-        curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_BLACK) #selected color pair
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE) #selected color pair
         curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK) # red text for alerts
         curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK) # green text for alerts
 
@@ -280,6 +330,14 @@ class Monidog:
             if key == 113 and not(editingMode):
                 # key is 'q' -> quit
                 running = False
+            elif key == curses.KEY_F1:
+                #key is F1 -> stats for the last 2 minutes view
+                with self.last2MinLock:
+                    self.last2Min = True
+            elif key == curses.KEY_F2:
+                #key is F2 -> stats for the last hour
+                with self.last2MinLock:
+                    self.last2Min = False
             elif key == 27 and editingMode:
                 # key is Esc -> stop editing
                 self.setInputsInfo(( False, urlBeingWritten, currentInterval ))
@@ -291,8 +349,7 @@ class Monidog:
                 self.setInputsInfo(( True, urlBeingWritten, currentInterval ))
             elif 32 <= key and key <= 126 and editingMode:
                 # key is writable ascii char -> we append it to the url being written
-                self.setInputsInfo((
-                    editingMode, "{0}{1}".format(urlBeingWritten, chr(key)), currentInterval ))
+                self.setInputsInfo((editingMode, "{0}{1}".format(urlBeingWritten, chr(key)), currentInterval ))
             elif key == 127 and editingMode:
                 # key is backspace -> we remove the last char of the url beign written
                 self.setInputsInfo(( editingMode, urlBeingWritten[:-1], currentInterval ))
@@ -307,6 +364,28 @@ class Monidog:
             elif key == curses.KEY_DOWN and editingMode and currentInterval > 5:
                 # decreasing the check interval time
                 self.setInputsInfo((editingMode, urlBeingWritten, currentInterval-1.0))
+            elif key == 120 and not(editingMode):
+                # key is 'x' -> delete currently selected url
+                selectedUrlIndex = self.getSelectedUrlIndex()
+                if selectedUrlIndex != None:
+                    with self.modifyWebsitesList:
+                        if len(self.urls)-1 == 0:
+                            self.setSelectedUrlIndex(None)
+                        elif selectedUrlIndex == len(self.urls)-1:
+                            self.setSelectedUrlIndex(selectedUrlIndex-1)
+                    self.removeWebsiteMonitor(selectedUrlIndex, True)
+            elif key == curses.KEY_UP and not(editingMode):
+                #moving selection cursor up if possible
+                with self.modifyWebsitesList:
+                    selectedUrlIndex = self.getSelectedUrlIndex()
+                    if selectedUrlIndex != None and selectedUrlIndex > 0:
+                        self.setSelectedUrlIndex(selectedUrlIndex-1)
+            elif key == curses.KEY_DOWN and not(editingMode):
+                #moving selection cursor down if possible
+                with self.modifyWebsitesList:
+                    selectedUrlIndex = self.getSelectedUrlIndex()
+                    if selectedUrlIndex != None and selectedUrlIndex < len(self.urls)-1:
+                        self.setSelectedUrlIndex(selectedUrlIndex+1)
 
         #####################
         # DESINITIALIZATION #

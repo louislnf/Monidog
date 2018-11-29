@@ -5,14 +5,14 @@ class WebsiteStatsCalculator:
 
     def __init__(self, websiteMonitor):
         self.websiteMonitor = websiteMonitor
-        self.statsLock = threading.RLock()
+        self.statsLock = threading.Lock()
         # stats are represented by tuples
         # (timestamp, avgAvailability, avgResponseTime, minResponseTime, maxResponseTime, statusCodeDict, numberOfChecks)
         self.statsLast2min = (-1.0, -1.0, -1.0, -1.0, -1.0, {}, 0)
         self.statsLastHour = (-1.0, -1.0, -1.0, -1.0, -1.0, {}, 0)
         # we need locks for both stats as we may access and modify them from different threads
-        self.statsLast2minLock = threading.RLock()
-        self.statsLastHourLock = threading.RLock()
+        self.statsLast2minLock = threading.Lock()
+        self.statsLastHourLock = threading.Lock()
 
     ######
     # THREAD SAFE GETTERS/SETTERS

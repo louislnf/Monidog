@@ -13,11 +13,11 @@ class WebsiteMonitor:
         maxNumberOfChecksSaved = int(round(3600.0/checkInterval))
         self.checksHistory = History(maxNumberOfChecksSaved)
         # the history may be used by other threads, thus we protect it with a lock
-        self.historyLock = threading.RLock()
+        self.historyLock = threading.Lock()
         # interval keeps track of the Interval instance that execute self.check every self.checkInterval
         self.interval = None
         # keeps track of when the monitor was launched
-        self.startedMonitoringTime = -1.0
+        self.startedMonitoringTime = time.time()
 
     def check(self):
         # HTTP HEAD request to the url of the monitored website
