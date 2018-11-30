@@ -273,9 +273,9 @@ class Monidog:
         self.screenDrawer.drawText(y1, x1+104, "{0}".format(nbCode500), flag, 4)
         # code others
         nbCodeTotal = sum(statusCodeDict[code] for code in statusCodeDict)
-        nbCodeOthers = nbCodeTotal-nbCode200-nbCode404-nbCode500
+        nbCodeOthers = nbCodeTotal-nbCode200-nbCode301-nbCode404-nbCode500
         self.screenDrawer.drawText(y1, x1+110, "{0}".format(nbCodeOthers), flag, 4)
-        self.screenDrawer.drawText(y1, x1+116, "{0}".format(nbCodeOthers), flag, 4)
+        self.screenDrawer.drawText(y1, x1+116, "{0}".format(nbCodeTotal), flag, 4)
 
     def __optionalStatToString(self, s):
         if s < 0:
